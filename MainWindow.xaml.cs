@@ -49,16 +49,16 @@ namespace Boundless
 
     public partial class MainWindow : Window
     {
-        [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hwnd, int index);
-        [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
-        [DllImport("user32.dll")] private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-        [DllImport("user32.dll")] private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+        [DllImport("user32.dll")] private static extern int GetWindowLong(nint hwnd, int index);
+        [DllImport("user32.dll")] private static extern int SetWindowLong(nint hwnd, int index, int newStyle);
+        [DllImport("user32.dll")] private static extern bool RegisterHotKey(nint hWnd, int id, uint fsModifiers, uint vk);
+        [DllImport("user32.dll")] private static extern bool UnregisterHotKey(nint hWnd, int id);
         private const int GWL_EXSTYLE = -20; private const int WS_EX_TRANSPARENT = 0x00000020; private const int WS_EX_LAYERED = 0x00000080;
 
         private Point _dragStartPoint;
         private bool _isImmersive = false;
         private bool _isGhostMode = false;
-        private IntPtr _windowHandle;
+        private nint _windowHandle;
 
         // 【消除警告 1】给托盘图标加上 ? 表示允许初始为空
         private System.Windows.Forms.NotifyIcon? _trayIcon;
@@ -91,15 +91,15 @@ namespace Boundless
             if (!string.IsNullOrEmpty(u) && !string.IsNullOrEmpty(g) && _appData.Profiles.ContainsKey(u) && _appData.Profiles[u].ContainsKey(g))
             {
                 _currentUser = u; _currentGame = g; var profile = _appData.Profiles[u][g];
-                this.Width = profile.Width; this.Height = profile.Height;
-                if (profile.Left >= 0 && profile.Top >= 0) { this.Left = profile.Left; this.Top = profile.Top; }
+                Width = profile.Width; Height = profile.Height;
+                if (profile.Left >= 0 && profile.Top >= 0) { Left = profile.Left; Top = profile.Top; }
                 StatusText.Text = $" 澪一 无界 穿透模式默认快捷键：Ctrl + Shift + Alt + F2 - 当前数据: {u} / {g}";
                 _pendingLoadTime = profile.VideoTime; 
                 BiliBrowser.Source = new Uri(profile.Url);
             }
             else { BiliBrowser.Source = new Uri("https://www.bilibili.com"); }
 
-            this.StateChanged += MainWindow_StateChanged; 
+            StateChanged += MainWindow_StateChanged; 
         }
 
         private void SetupTrayIcon()
@@ -179,22 +179,22 @@ namespace Boundless
 
         private void ToggleVisibility()
         {
-            if (this.Visibility == Visibility.Visible && this.WindowState != WindowState.Minimized) 
+            if (Visibility == Visibility.Visible && WindowState != WindowState.Minimized) 
             {
                 // 老板模式：隐藏时自动暂停视频
                 if (_appData.BossMode)
                 {
                     RunBrowserScript("document.querySelector('.bpx-player-ctrl-play')?.click();");
                 }
-                this.WindowState = WindowState.Minimized;
+                WindowState = WindowState.Minimized;
             }
             else 
             {
-                this.Visibility = Visibility.Visible;
-                this.WindowState = WindowState.Normal;
-                this.Activate();
-                this.Topmost = true; // 强制置顶
-                this.Focus();
+                Visibility = Visibility.Visible;
+                WindowState = WindowState.Normal;
+                Activate();
+                Topmost = true; // 强制置顶
+                Focus();
                 
                 // 老板模式：显示时自动继续播放
                 if (_appData.BossMode)
@@ -208,22 +208,22 @@ namespace Boundless
                 // 确保窗口置顶的额外措施
                 System.Threading.Tasks.Task.Delay(50).ContinueWith(_ =>
                 {
-                    this.Dispatcher.Invoke(() =>
+                    Dispatcher.Invoke(() =>
                     {
-                        this.Topmost = false;
-                        this.Topmost = true;
-                        this.Activate();
-                        this.Focus();
+                        Topmost = false;
+                        Topmost = true;
+                        Activate();
+                        Focus();
                     });
                 });
                 
                 // 再次延迟确保窗口完全显示并置顶
                 System.Threading.Tasks.Task.Delay(150).ContinueWith(_ =>
                 {
-                    this.Dispatcher.Invoke(() =>
+                    Dispatcher.Invoke(() =>
                     {
-                        this.Activate();
-                        this.Focus();
+                        Activate();
+                        Focus();
                     });
                 });
             }
@@ -263,14 +263,14 @@ namespace Boundless
             }
         }
 
-        private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        private nint HwndHook(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
         {
             if (msg == 0x0312 && _hotkeyActions.ContainsKey(wParam.ToInt32())) 
             { 
                 _hotkeyActions[wParam.ToInt32()].Invoke(); 
                 handled = true; 
             }
-            return IntPtr.Zero;
+            return nint.Zero;
         }
 
         private async void RunBrowserScript(string script) { if (BiliBrowser.CoreWebView2 != null) await BiliBrowser.CoreWebView2.ExecuteScriptAsync(script); }
@@ -425,8 +425,8 @@ namespace Boundless
                 }
 
                 var profile = _appData.Profiles[user][game];
-                this.Width = profile.Width; this.Height = profile.Height;
-                if (profile.Left >= 0 && profile.Top >= 0) { this.Left = profile.Left; this.Top = profile.Top; }
+                Width = profile.Width; Height = profile.Height;
+                if (profile.Left >= 0 && profile.Top >= 0) { Left = profile.Left; Top = profile.Top; }
                 _pendingLoadTime = profile.VideoTime; 
                 BiliBrowser.CoreWebView2?.Navigate(profile.Url);
                 _currentUser = user; _currentGame = game; _appData.LastUser = user; _appData.LastGame = game;
@@ -442,7 +442,7 @@ namespace Boundless
             if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(game)) { MessageBox.Show("分组和类名不能为空！"); return; }
             double currentTime = 0;
             try { if (BiliBrowser.CoreWebView2 != null) { string timeStr = await BiliBrowser.CoreWebView2.ExecuteScriptAsync("(() => { let v = document.querySelector('bwp-video') || document.querySelector('video'); return v ? v.currentTime : 0; })()"); if (double.TryParse(timeStr, out double parsedTime)) currentTime = parsedTime; } } catch { }
-            var newProfile = new ProfileData { Url = BiliBrowser.Source?.ToString() ?? "https://www.bilibili.com", Width = this.WindowState == WindowState.Maximized ? this.RestoreBounds.Width : this.Width, Height = this.WindowState == WindowState.Maximized ? this.RestoreBounds.Height : this.Height, Left = this.WindowState == WindowState.Maximized ? this.RestoreBounds.Left : this.Left, Top = this.WindowState == WindowState.Maximized ? this.RestoreBounds.Top : this.Top, VideoTime = currentTime };
+            var newProfile = new ProfileData { Url = BiliBrowser.Source?.ToString() ?? "https://www.bilibili.com", Width = WindowState == WindowState.Maximized ? RestoreBounds.Width : Width, Height = WindowState == WindowState.Maximized ? RestoreBounds.Height : Height, Left = WindowState == WindowState.Maximized ? RestoreBounds.Left : Left, Top = WindowState == WindowState.Maximized ? RestoreBounds.Top : Top, VideoTime = currentTime };
             if (!_appData.Profiles.ContainsKey(user)) _appData.Profiles[user] = new Dictionary<string, ProfileData>();
             _appData.Profiles[user][game] = newProfile;
             _currentUser = user; _currentGame = game; _appData.LastUser = user; _appData.LastGame = game;
@@ -475,7 +475,7 @@ namespace Boundless
             }
         }
 
-        private void MinimizeButton_Click(object sender, RoutedEventArgs e) { this.WindowState = WindowState.Minimized; }
+        private void MinimizeButton_Click(object sender, RoutedEventArgs e) { WindowState = WindowState.Minimized; }
 
         private async void CloseButton_Click(object sender, RoutedEventArgs e)
         {
@@ -490,8 +490,8 @@ namespace Boundless
                 double currentTime = 0;
                 try { if (BiliBrowser.CoreWebView2 != null) { string timeStr = await BiliBrowser.CoreWebView2.ExecuteScriptAsync("(() => { let v = document.querySelector('bwp-video') || document.querySelector('video'); return v ? v.currentTime : 0; })()"); if (double.TryParse(timeStr, out double parsedTime)) currentTime = parsedTime; } } catch { }
                 _appData.Profiles[_currentUser][_currentGame].VideoTime = currentTime; _appData.Profiles[_currentUser][_currentGame].Url = BiliBrowser.Source?.ToString() ?? "https://www.bilibili.com";
-                double w = this.WindowState == WindowState.Maximized ? this.RestoreBounds.Width : this.Width; double h = this.WindowState == WindowState.Maximized ? this.RestoreBounds.Height : this.Height;
-                if (w > 100 && h > 100) { _appData.Profiles[_currentUser][_currentGame].Width = w; _appData.Profiles[_currentUser][_currentGame].Height = h; _appData.Profiles[_currentUser][_currentGame].Left = this.WindowState == WindowState.Maximized ? this.RestoreBounds.Left : this.Left; _appData.Profiles[_currentUser][_currentGame].Top = this.WindowState == WindowState.Maximized ? this.RestoreBounds.Top : this.Top; }
+                double w = WindowState == WindowState.Maximized ? RestoreBounds.Width : Width; double h = WindowState == WindowState.Maximized ? RestoreBounds.Height : Height;
+                if (w > 100 && h > 100) { _appData.Profiles[_currentUser][_currentGame].Width = w; _appData.Profiles[_currentUser][_currentGame].Height = h; _appData.Profiles[_currentUser][_currentGame].Left = WindowState == WindowState.Maximized ? RestoreBounds.Left : Left; _appData.Profiles[_currentUser][_currentGame].Top = WindowState == WindowState.Maximized ? RestoreBounds.Top : Top; }
                 
                 SaveConfig();
                 SaveUserProfile(_currentUser, _appData.Profiles[_currentUser]);
@@ -499,7 +499,7 @@ namespace Boundless
             
             _trayIcon?.Dispose(); 
             for (int i = 1; i <= 7; i++) UnregisterHotKey(_windowHandle, i);
-            this.Close();
+            Close();
         }
 
         private void ToggleGhostMode()
@@ -507,17 +507,17 @@ namespace Boundless
             _isGhostMode = !_isGhostMode; int extendedStyle = GetWindowLong(_windowHandle, GWL_EXSTYLE);
             if (_isGhostMode) 
             { 
-                SetWindowLong(_windowHandle, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT | WS_EX_LAYERED); 
-                this.Opacity = 0.6; 
+                SetWindowLong(_windowHandle, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT | WS_EX_LAYERED);
+                Opacity = 0.6; 
                 TopControlBar.Visibility = Visibility.Hidden;
                 ResizeCorner.Visibility = Visibility.Hidden;
                 // 隐藏边框 - 将窗口背景设为完全透明
-                RootContainer.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0, 0, 0, 0));
+                RootContainer.Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
             }
             else 
             { 
-                SetWindowLong(_windowHandle, GWL_EXSTYLE, extendedStyle & ~WS_EX_TRANSPARENT); 
-                this.Opacity = 1.0; 
+                SetWindowLong(_windowHandle, GWL_EXSTYLE, extendedStyle & ~WS_EX_TRANSPARENT);
+                Opacity = 1.0; 
                 TopControlBar.Visibility = Visibility.Visible;
                 ResizeCorner.Visibility = Visibility.Visible;
                 // 恢复边框 - 应用当前主题的背景色
@@ -530,7 +530,7 @@ namespace Boundless
                     }
                     else
                     {
-                        RootContainer.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0, 0, 0, 0));
+                        RootContainer.Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
                     }
                 }
             }
@@ -538,7 +538,7 @@ namespace Boundless
 
         private void MainWindow_StateChanged(object? sender, EventArgs e)
         {
-            if (this.WindowState == WindowState.Maximized) { RootContainer.Margin = new Thickness(6); ResizeCorner.Visibility = Visibility.Collapsed; BiliBrowser.Margin = new Thickness(0, TopControlBar.Height, 0, 0); }
+            if (WindowState == WindowState.Maximized) { RootContainer.Margin = new Thickness(6); ResizeCorner.Visibility = Visibility.Collapsed; BiliBrowser.Margin = new Thickness(0, TopControlBar.Height, 0, 0); }
             else { RootContainer.Margin = new Thickness(0); ResizeCorner.Visibility = Visibility.Visible; BiliBrowser.Margin = new Thickness(0, TopControlBar.Height, 12, 12); }
         }
 
@@ -625,11 +625,11 @@ namespace Boundless
         }
 
         private void BackButton_Click(object sender, RoutedEventArgs e) { if (BiliBrowser.CoreWebView2 != null && BiliBrowser.CoreWebView2.CanGoBack) BiliBrowser.CoreWebView2.GoBack(); }
-        private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) { if (e.ClickCount == 2) { this.WindowState = this.WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized; return; } if (e.LeftButton == MouseButtonState.Pressed) { if (this.WindowState == WindowState.Maximized) _dragStartPoint = e.GetPosition(this); else this.DragMove(); } }
-        private void Window_MouseMove(object sender, MouseEventArgs e) { if (e.LeftButton == MouseButtonState.Pressed && this.WindowState == WindowState.Maximized) { Point currentPoint = e.GetPosition(this); if (Math.Abs(currentPoint.X - _dragStartPoint.X) > SystemParameters.MinimumHorizontalDragDistance || Math.Abs(currentPoint.Y - _dragStartPoint.Y) > SystemParameters.MinimumVerticalDragDistance) { Point absoluteScreenPos = PointToScreen(currentPoint); double ratioX = currentPoint.X / this.ActualWidth; this.WindowState = WindowState.Normal; PresentationSource source = PresentationSource.FromVisual(this); if (source != null) { Point logicalPos = source.CompositionTarget.TransformFromDevice.Transform(absoluteScreenPos); this.Left = logicalPos.X - (this.RestoreBounds.Width * ratioX); this.Top = logicalPos.Y - 15; } this.DragMove(); } } }
-        private void TopControlBar_MouseEnter(object sender, MouseEventArgs e) { TopControlBar.Height = 35; TopControlBar.Background = ThemeManager.GetBrush(ThemeManager.CurrentTheme.Colors.TopBarBackground); TopControlContent.Visibility = Visibility.Visible; double rb = (this.WindowState == WindowState.Maximized) ? 0 : 12; BiliBrowser.Margin = new Thickness(0, 35, rb, rb); }
-        private void TopControlBar_MouseLeave(object sender, MouseEventArgs e) { TopControlBar.Height = 10; TopControlBar.Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)); TopControlContent.Visibility = Visibility.Hidden; double rb = (this.WindowState == WindowState.Maximized) ? 0 : 12; BiliBrowser.Margin = new Thickness(0, 10, rb, rb); }
-        private void ResizeGrip_DragDelta(object sender, DragDeltaEventArgs e) { if (this.Width + e.HorizontalChange > this.MinWidth) this.Width += e.HorizontalChange; if (this.Height + e.VerticalChange > this.MinHeight) this.Height += e.VerticalChange; }
+        private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) { if (e.ClickCount == 2) { WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized; return; } if (e.LeftButton == MouseButtonState.Pressed) { if (WindowState == WindowState.Maximized) _dragStartPoint = e.GetPosition(this); else DragMove(); } }
+        private void Window_MouseMove(object sender, MouseEventArgs e) { if (e.LeftButton == MouseButtonState.Pressed && WindowState == WindowState.Maximized) { Point currentPoint = e.GetPosition(this); if (Math.Abs(currentPoint.X - _dragStartPoint.X) > SystemParameters.MinimumHorizontalDragDistance || Math.Abs(currentPoint.Y - _dragStartPoint.Y) > SystemParameters.MinimumVerticalDragDistance) { Point absoluteScreenPos = PointToScreen(currentPoint); double ratioX = currentPoint.X / ActualWidth; WindowState = WindowState.Normal; PresentationSource source = PresentationSource.FromVisual(this); if (source != null) { Point logicalPos = source.CompositionTarget.TransformFromDevice.Transform(absoluteScreenPos); Left = logicalPos.X - RestoreBounds.Width * ratioX; Top = logicalPos.Y - 15; } DragMove(); } } }
+        private void TopControlBar_MouseEnter(object sender, MouseEventArgs e) { TopControlBar.Height = 35; TopControlBar.Background = ThemeManager.GetBrush(ThemeManager.CurrentTheme.Colors.TopBarBackground); TopControlContent.Visibility = Visibility.Visible; double rb = WindowState == WindowState.Maximized ? 0 : 12; BiliBrowser.Margin = new Thickness(0, 35, rb, rb); }
+        private void TopControlBar_MouseLeave(object sender, MouseEventArgs e) { TopControlBar.Height = 10; TopControlBar.Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)); TopControlContent.Visibility = Visibility.Hidden; double rb = WindowState == WindowState.Maximized ? 0 : 12; BiliBrowser.Margin = new Thickness(0, 10, rb, rb); }
+        private void ResizeGrip_DragDelta(object sender, DragDeltaEventArgs e) { if (Width + e.HorizontalChange > MinWidth) Width += e.HorizontalChange; if (Height + e.VerticalChange > MinHeight) Height += e.VerticalChange; }
 
         private void OnThemeChanged(ThemeData theme)
         {
@@ -649,7 +649,7 @@ namespace Boundless
             }
             else
             {
-                RootContainer.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0, 0, 0, 0));
+                RootContainer.Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
             }
 
             var buttonRadius = ThemeManager.GetCornerRadius(styles.ButtonCornerRadius);
@@ -713,7 +713,7 @@ namespace Boundless
             }
         }
 
-        private void ApplyButtonStyle(System.Windows.Controls.Primitives.RepeatButton btn, string bg, string fg, string border, CornerRadius radius, Thickness borderThickness, FontWeight fontWeight, double opacity)
+        private void ApplyButtonStyle(RepeatButton btn, string bg, string fg, string border, CornerRadius radius, Thickness borderThickness, FontWeight fontWeight, double opacity)
         {
             btn.Background = ThemeManager.GetBrush(bg);
             btn.Foreground = ThemeManager.GetBrush(fg);
