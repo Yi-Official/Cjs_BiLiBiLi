@@ -1,0 +1,127 @@
+<Window x:Class="Boundless.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="无界 (Boundless)" Height="700" Width="1200"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent" 
+        Topmost="True" MinHeight="300" MinWidth="450"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown" MouseMove="Window_MouseMove">
+
+    <Window.Resources>
+        <Style x:Key="RoundedButtonStyle" TargetType="Button">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Name="ButtonBorder" 
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="0"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="RoundedRepeatButtonStyle" TargetType="RepeatButton">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton">
+                        <Border Name="ButtonBorder" 
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="0"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Name="RootContainer" Background="#80000000"> 
+        
+        <wv2:WebView2 Name="BiliBrowser" Source="https://www.bilibili.com" Margin="0,5,12,12" />
+
+        <Grid Name="TopControlBar" Height="10" VerticalAlignment="Top" Background="#01000000" Cursor="SizeAll"
+              MouseEnter="TopControlBar_MouseEnter" MouseLeave="TopControlBar_MouseLeave">
+            <Grid Name="TopControlContent" Visibility="Hidden">
+                
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="10,0,0,0">
+                    <Button Name="BtnPrev" Content="⏮" Width="30" Height="20" Margin="0,0,5,0" Click="PrevP_Click" Background="#444" Foreground="White" BorderThickness="0" Cursor="Hand" ToolTip="上一P" Style="{StaticResource RoundedButtonStyle}"/>
+                    <RepeatButton Name="BtnRewind" Content="⏪" Width="30" Height="20" Margin="0,0,5,0" Click="Rewind_Click" Delay="500" Interval="100" Background="#444" Foreground="White" BorderThickness="0" Cursor="Hand" ToolTip="后退 (长按连续)" Style="{StaticResource RoundedRepeatButtonStyle}"/>
+                    <Button Name="BtnPlay" Content="⏯" Width="30" Height="20" Margin="0,0,5,0" Click="PlayPause_Click" Background="#444" Foreground="White" BorderThickness="0" Cursor="Hand" ToolTip="播放/暂停" Style="{StaticResource RoundedButtonStyle}"/>
+                    <RepeatButton Name="BtnForward" Content="⏩" Width="30" Height="20" Margin="0,0,5,0" Click="Forward_Click" Delay="500" Interval="100" Background="#444" Foreground="White" BorderThickness="0" Cursor="Hand" ToolTip="快进 (长按连续)" Style="{StaticResource RoundedRepeatButtonStyle}"/>
+                    <Button Name="BtnNext" Content="⏭" Width="30" Height="20" Margin="0,0,10,0" Click="NextP_Click" Background="#444" Foreground="White" BorderThickness="0" Cursor="Hand" ToolTip="下一P" Style="{StaticResource RoundedButtonStyle}"/>
+                    <TextBlock Name="StatusText" Text="澪一 无界 - 穿透模式默认快捷键：Ctrl + Shift + Alt + F2" Foreground="White" VerticalAlignment="Center" Opacity="0.8"/>
+                </StackPanel>
+                
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,10,0">
+                    <Button Name="BtnData" Content="数据 (💾)" Width="65" Height="20" Margin="0,0,10,0" Click="OpenDataPanel_Click" Cursor="Hand" Background="#005A9E" Foreground="White" BorderThickness="0" Style="{StaticResource RoundedButtonStyle}"/>
+                    <Button Name="BtnTheme" Content="主题 (🎨)" Width="65" Height="20" Margin="0,0,10,0" Click="OpenThemeWindow_Click" Cursor="Hand" Background="#444" Foreground="White" BorderThickness="0" Style="{StaticResource RoundedButtonStyle}"/>
+                    <Button Name="BtnImmerse" Content="沉浸 (👁️)" Width="65" Height="20" Margin="0,0,10,0" Click="ImmersiveButton_Click" Cursor="Hand" Background="#444" Foreground="White" BorderThickness="0" Style="{StaticResource RoundedButtonStyle}"/>
+                    <Button Name="BtnBack" Content="返回 (←)" Width="60" Height="20" Margin="0,0,10,0" Click="BackButton_Click" Cursor="Hand" Background="#444" Foreground="White" BorderThickness="0" Style="{StaticResource RoundedButtonStyle}"/>
+                    <Button Name="BtnMinimize" Content="隐藏 (-)" Width="60" Height="20" Margin="0,0,10,0" Click="MinimizeButton_Click" Cursor="Hand" Background="#444" Foreground="White" BorderThickness="0" Style="{StaticResource RoundedButtonStyle}"/>
+                    <Button Name="BtnClose" Content="退出 (X)" Width="60" Height="20" Click="CloseButton_Click" Cursor="Hand" Background="#800" Foreground="White" BorderThickness="0" Style="{StaticResource RoundedButtonStyle}"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+
+        <Border Name="DataPanel" Visibility="Hidden" Background="#E61E1E1E" Margin="40,50,40,40" CornerRadius="8" BorderBrush="#555" BorderThickness="1">
+            <Grid Margin="15">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,15">
+                    <Button Name="BtnTabLoad" Content="读取数据" Width="80" Height="25" Margin="5" Click="TabLoad_Click" Background="#444" Foreground="White" BorderThickness="0" Cursor="Hand" Style="{StaticResource RoundedButtonStyle}"/>
+                    <Button Name="BtnTabSave" Content="保存数据" Width="80" Height="25" Margin="5" Click="TabSave_Click" Background="#444" Foreground="White" BorderThickness="0" Cursor="Hand" Style="{StaticResource RoundedButtonStyle}"/>
+                    <Button Name="BtnTabManage" Content="删除数据" Width="80" Height="25" Margin="5" Click="TabManage_Click" Background="#444" Foreground="White" BorderThickness="0" Cursor="Hand" Style="{StaticResource RoundedButtonStyle}"/>
+                    <Button Name="BtnClosePanel" Content="关闭面板" Width="80" Height="25" Margin="20,5,5,5" Click="CloseDataPanel_Click" Background="#800" Foreground="White" BorderThickness="0" Cursor="Hand" Style="{StaticResource RoundedButtonStyle}"/>
+                </StackPanel>
+
+                <StackPanel Name="ViewLoad" Grid.Row="1" Visibility="Visible">
+                    <TextBlock Name="TxtLoadUser" Text="1. 选择分组:" Foreground="White" Margin="0,5"/>
+                    <ComboBox Name="ComboLoadUser" Height="25" SelectionChanged="ComboLoadUser_SelectionChanged"/>
+                    <TextBlock Name="TxtLoadGame" Text="2. 选择类名:" Foreground="White" Margin="0,15,0,5"/>
+                    <ComboBox Name="ComboLoadGame" Height="25"/>
+                    <Button Name="BtnExecuteLoad" Content="确认读取，立即空降" Height="30" Margin="0,20,0,0" Background="#0078D7" Foreground="White" BorderThickness="0" Click="ExecuteLoad_Click" Cursor="Hand" Style="{StaticResource RoundedButtonStyle}"/>
+                </StackPanel>
+
+                <StackPanel Name="ViewSave" Grid.Row="1" Visibility="Hidden">
+                    <TextBlock Name="TxtSaveUser" Text="输入/选择 分组 (如: 澪依):" Foreground="White" Margin="0,5"/>
+                    <ComboBox Name="ComboSaveUser" Height="25" IsEditable="True" TextBoxBase.TextChanged="ComboSaveUser_TextChanged"/>
+                    <TextBlock Name="TxtSaveGame" Text="输入/选择 类名 (如: 性格):" Foreground="White" Margin="0,15,0,5"/>
+                    <ComboBox Name="ComboSaveGame" Height="25" IsEditable="True"/>
+                    <Button Name="BtnExecuteSave" Content="覆盖 / 创建新数据" Height="30" Margin="0,20,0,0" Background="#107C10" Foreground="White" BorderThickness="0" Click="ExecuteSave_Click" Cursor="Hand" Style="{StaticResource RoundedButtonStyle}"/>
+                </StackPanel>
+
+                <StackPanel Name="ViewManage" Grid.Row="1" Visibility="Hidden">
+                    <TextBlock Name="TxtManageUser" Text="选择要管理的组:" Foreground="White" Margin="0,5"/>
+                    <ComboBox Name="ComboManageUser" Height="25" SelectionChanged="ComboManageUser_SelectionChanged"/>
+                    <TextBlock Name="TxtManageGame" Text="该用户下的类:" Foreground="White" Margin="0,15,0,5"/>
+                    <ListBox Name="ListManageGames" Height="100" Background="#333" Foreground="White"/>
+                    <Button Name="BtnExecuteDelete" Content="删除选中的数据" Height="30" Margin="0,10,0,0" Background="#A4262C" Foreground="White" BorderThickness="0" Click="ExecuteDelete_Click" Cursor="Hand" Style="{StaticResource RoundedButtonStyle}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Thumb Name="ResizeCorner" Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Bottom" Cursor="SizeNWSE" DragDelta="ResizeGrip_DragDelta">
+            <Thumb.Template><ControlTemplate><Path Data="M 12,0 L 12,12 L 0,12 Z" Fill="White" Opacity="0.8"/></ControlTemplate></Thumb.Template>
+        </Thumb>
+    </Grid>
+</Window>
