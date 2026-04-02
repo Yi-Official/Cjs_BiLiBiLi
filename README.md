@@ -23,11 +23,11 @@
 
 ## ⌨️ 快捷键
 
-| 功能         | 默认快捷键 |
-|--------------|------------|
-| 显示/隐藏窗口 | Ctrl + Shift + Alt + D |
-| 鼠标穿透模式  | Ctrl + Shift + Alt + F2 |
-| 沉浸式模式    | Ctrl + Shift + Alt + F1 |
-| 播放/暂停     | Ctrl + Shift + 2 |
-| 快进/快退     | Ctrl + Shift + 1&3 |
-| 上一P/下一P   | Ctrl + Shift + ~&5 |
+| 功能         | 默认快捷键 |    自定义快捷键 |
+|--------------|------------|------------|
+| 显示/隐藏窗口 | Ctrl + Shift + Alt + D | ✅️ |
+| 鼠标穿透模式  | Ctrl + Shift + Alt + F2 | ✅️ |
+| 沉浸式模式    | Ctrl + Shift + Alt + F1 | ✅️ |
+| 播放/暂停     | Ctrl + Shift + 2 | ✅️ |
+| 快进/快退     | Ctrl + Shift + 1&3 | ✅️ ✅️ |
+| 上一P/下一P   | Ctrl + Shift + ~&5 | ✅️ ✅️ |
