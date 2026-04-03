@@ -21,6 +21,9 @@
 
 1. [Github下载最新版](https://github.com/Yi-Official/Cjs_BiLiBiLi/releases/latest)
 2. [123云盘下载](https://www.123684.com/s/CEzDjv-qtWp?pwd=yNHz#)
+3. **QQ群下载**，群号：<kbd>527457758</kbd>
+   
+   <img src="./无用的图片/qq吹水群.jpg" width="180" alt="QQ群二维码" />
 
 ## ⌨️ 快捷键
 
