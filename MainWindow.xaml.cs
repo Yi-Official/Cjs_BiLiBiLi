@@ -45,6 +45,11 @@ namespace Boundless
         public bool BossMode { get; set; } = false;
         public AppHotkeys Hotkeys { get; set; } = new AppHotkeys();
         public Dictionary<string, Dictionary<string, ProfileData>> Profiles { get; set; } = new();
+        // 保存窗口位置和大小
+        public double WindowWidth { get; set; } = 1200;
+        public double WindowHeight { get; set; } = 700;
+        public double WindowLeft { get; set; } = -1;
+        public double WindowTop { get; set; } = -1;
     }
 
     public partial class MainWindow : Window
@@ -97,7 +102,18 @@ namespace Boundless
                 _pendingLoadTime = profile.VideoTime; 
                 BiliBrowser.Source = new Uri(profile.Url);
             }
-            else { BiliBrowser.Source = new Uri("https://www.bilibili.com"); }
+            else 
+            {
+                // 没有存档时，使用保存的窗口位置和大小
+                Width = _appData.WindowWidth;
+                Height = _appData.WindowHeight;
+                if (_appData.WindowLeft >= 0 && _appData.WindowTop >= 0)
+                {
+                    Left = _appData.WindowLeft;
+                    Top = _appData.WindowTop;
+                }
+                BiliBrowser.Source = new Uri("https://www.bilibili.com");
+            }
 
             StateChanged += MainWindow_StateChanged; 
         }
@@ -297,7 +313,13 @@ namespace Boundless
                         _appData.LastUser = data.LastUser;
                         _appData.LastGame = data.LastGame;
                         _appData.CurrentTheme = data.CurrentTheme;
+                        _appData.BossMode = data.BossMode;
                         _appData.Hotkeys = data.Hotkeys;
+                        // 加载窗口位置和大小
+                        _appData.WindowWidth = data.WindowWidth;
+                        _appData.WindowHeight = data.WindowHeight;
+                        _appData.WindowLeft = data.WindowLeft;
+                        _appData.WindowTop = data.WindowTop;
                         // 如果旧文件里还有 Profiles，准备迁移
                         if (data.Profiles != null && data.Profiles.Count > 0) {
                             foreach(var kv in data.Profiles) {
@@ -335,7 +357,12 @@ namespace Boundless
                 CurrentTheme = _appData.CurrentTheme,
                 BossMode = _appData.BossMode,
                 Hotkeys = _appData.Hotkeys,
-                Profiles = new Dictionary<string, Dictionary<string, ProfileData>>() // 保持为空
+                Profiles = new Dictionary<string, Dictionary<string, ProfileData>>(), // 保持为空
+                // 保存窗口位置和大小
+                WindowWidth = WindowState == WindowState.Maximized ? RestoreBounds.Width : Width,
+                WindowHeight = WindowState == WindowState.Maximized ? RestoreBounds.Height : Height,
+                WindowLeft = WindowState == WindowState.Maximized ? RestoreBounds.Left : Left,
+                WindowTop = WindowState == WindowState.Maximized ? RestoreBounds.Top : Top
             };
             string json = JsonSerializer.Serialize(configOnly, new JsonSerializerOptions { WriteIndented = true }); 
             File.WriteAllText(ConfigPath, json); 
@@ -461,6 +488,17 @@ namespace Boundless
             string? game = ListManageGames.SelectedItem as string;
             if (!string.IsNullOrEmpty(user) && !string.IsNullOrEmpty(game)) {
                 _appData.Profiles[user].Remove(game);
+                
+                // 如果删除的是当前正在使用的存档，清空当前用户和游戏
+                if (_currentUser == user && _currentGame == game)
+                {
+                    _currentUser = "";
+                    _currentGame = "";
+                    _appData.LastUser = "";
+                    _appData.LastGame = "";
+                    StatusText.Text = " 澪一 无界 穿透模式默认快捷键：Ctrl + Shift + Alt + F2";
+                }
+                
                 if (_appData.Profiles[user].Count == 0) {
                     _appData.Profiles.Remove(user); 
                     DeleteUserProfile(user); // 删除对应的 JSON 文件
@@ -487,14 +525,22 @@ namespace Boundless
 
             if (!string.IsNullOrEmpty(_currentUser) && !string.IsNullOrEmpty(_currentGame))
             {
-                double currentTime = 0;
-                try { if (BiliBrowser.CoreWebView2 != null) { string timeStr = await BiliBrowser.CoreWebView2.ExecuteScriptAsync("(() => { let v = document.querySelector('bwp-video') || document.querySelector('video'); return v ? v.currentTime : 0; })()"); if (double.TryParse(timeStr, out double parsedTime)) currentTime = parsedTime; } } catch { }
-                _appData.Profiles[_currentUser][_currentGame].VideoTime = currentTime; _appData.Profiles[_currentUser][_currentGame].Url = BiliBrowser.Source?.ToString() ?? "https://www.bilibili.com";
-                double w = WindowState == WindowState.Maximized ? RestoreBounds.Width : Width; double h = WindowState == WindowState.Maximized ? RestoreBounds.Height : Height;
-                if (w > 100 && h > 100) { _appData.Profiles[_currentUser][_currentGame].Width = w; _appData.Profiles[_currentUser][_currentGame].Height = h; _appData.Profiles[_currentUser][_currentGame].Left = WindowState == WindowState.Maximized ? RestoreBounds.Left : Left; _appData.Profiles[_currentUser][_currentGame].Top = WindowState == WindowState.Maximized ? RestoreBounds.Top : Top; }
-                
+                if (_appData.Profiles.ContainsKey(_currentUser) && _appData.Profiles[_currentUser].ContainsKey(_currentGame))
+                {
+                    double currentTime = 0;
+                    try { if (BiliBrowser.CoreWebView2 != null) { string timeStr = await BiliBrowser.CoreWebView2.ExecuteScriptAsync("(() => { let v = document.querySelector('bwp-video') || document.querySelector('video'); return v ? v.currentTime : 0; })()"); if (double.TryParse(timeStr, out double parsedTime)) currentTime = parsedTime; } } catch { }
+                    _appData.Profiles[_currentUser][_currentGame].VideoTime = currentTime; _appData.Profiles[_currentUser][_currentGame].Url = BiliBrowser.Source?.ToString() ?? "https://www.bilibili.com";
+                    double w = WindowState == WindowState.Maximized ? RestoreBounds.Width : Width; double h = WindowState == WindowState.Maximized ? RestoreBounds.Height : Height;
+                    if (w > 100 && h > 100) { _appData.Profiles[_currentUser][_currentGame].Width = w; _appData.Profiles[_currentUser][_currentGame].Height = h; _appData.Profiles[_currentUser][_currentGame].Left = WindowState == WindowState.Maximized ? RestoreBounds.Left : Left; _appData.Profiles[_currentUser][_currentGame].Top = WindowState == WindowState.Maximized ? RestoreBounds.Top : Top; }
+                    
+                    SaveConfig();
+                    SaveUserProfile(_currentUser, _appData.Profiles[_currentUser]);
+                }
+            }
+            else
+            {
+                // 没有存档时，也要保存窗口位置和大小
                 SaveConfig();
-                SaveUserProfile(_currentUser, _appData.Profiles[_currentUser]);
             }
             
             _trayIcon?.Dispose(); 
