@@ -19,7 +19,8 @@
 
 ### 下载方式
 
-1. `澪一安装器.exe`
+1. [Github下载最新版](https://github.com/Yi-Official/Cjs_BiLiBiLi/releases/latest)
+2. [123云盘下载](https://www.123684.com/s/CEzDjv-qtWp?pwd=yNHz#)
 
 ## ⌨️ 快捷键
 
