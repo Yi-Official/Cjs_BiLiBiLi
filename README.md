@@ -37,3 +37,4 @@
 | 播放/暂停     | Ctrl + Shift + 2 | ✅️ |
 | 快进/快退     | Ctrl + Shift + 1&3 | ✅️ ✅️ |
 | 上一P/下一P   | Ctrl + Shift + ~&5 | ✅️ ✅️ |
+| 透明+/透明-   | Ctrl + Shift + PgUp/PgDn | ✅️ ✅️ |
