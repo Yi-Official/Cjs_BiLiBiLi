@@ -10,6 +10,7 @@ data/
 themes/
 数据/
 config.json
+ico/
 
 # Visual Studio / VS Code
 .vs/
@@ -33,3 +34,4 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 boundless_data.json
+2026-04-07.md

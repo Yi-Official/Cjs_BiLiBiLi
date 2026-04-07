@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -17,6 +20,8 @@ namespace Boundless
             _appData = data;
             _mainWindow = mainWindow;
             LoadUI();
+            TxtDefaultAddress.Text = _appData.DefaultAddress;
+            TxtIconPath.Text = _appData.CustomIconPath;
         }
 
         private void LoadUI()
@@ -30,20 +35,21 @@ namespace Boundless
             AddHotkeyRow("快进", _appData.Hotkeys.Forward, new HotkeyConfig { Modifiers = 6, Vk = 0x33, Display = "Ctrl + Shift + 3" }, h => _appData.Hotkeys.Forward = h);
             AddHotkeyRow("下一P", _appData.Hotkeys.Next, new HotkeyConfig { Modifiers = 6, Vk = 0x34, Display = "Ctrl + Shift + 4" }, h => _appData.Hotkeys.Next = h);
             AddHotkeyRow("显示/隐藏", _appData.Hotkeys.Toggle, new HotkeyConfig { Modifiers = 7, Vk = 0x44, Display = "Ctrl + Alt + Shift + D" }, h => _appData.Hotkeys.Toggle = h);
+            AddHotkeyRow("透明度+", _appData.Hotkeys.OpacityUp, new HotkeyConfig { Modifiers = 7, Vk = 0x21, Display = "Ctrl + Alt + Shift + PageUp" }, h => _appData.Hotkeys.OpacityUp = h);
+            AddHotkeyRow("透明度-", _appData.Hotkeys.OpacityDown, new HotkeyConfig { Modifiers = 7, Vk = 0x22, Display = "Ctrl + Alt + Shift + PageDown" }, h => _appData.Hotkeys.OpacityDown = h);
         }
 
         private void AddHotkeyRow(string labelText, HotkeyConfig current, HotkeyConfig defaultConfig, System.Action<HotkeyConfig> saveAction)
         {
             var panel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
-            
+
             var label = new TextBlock { Text = labelText, Width = 80, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center };
-            
+
             var textBox = new TextBox { Width = 240, Height = 25, IsReadOnly = true, Text = current.Display, Tag = current, VerticalContentAlignment = VerticalAlignment.Center, Background = new SolidColorBrush(Color.FromRgb(45, 45, 45)), Foreground = Brushes.White, BorderBrush = Brushes.Gray };
-            
+
             textBox.GotFocus += (s, e) => { textBox.Text = "请按下快捷键..."; textBox.BorderBrush = Brushes.DodgerBlue; };
             textBox.LostFocus += (s, e) => { textBox.Text = ((HotkeyConfig)textBox.Tag).Display; textBox.BorderBrush = Brushes.Gray; };
-            
-            // 【核心：按键拦截与 Esc 解绑】
+
             textBox.PreviewKeyDown += (s, e) =>
             {
                 e.Handled = true;
@@ -83,11 +89,61 @@ namespace Boundless
             HotkeysPanel.Children.Add(panel);
         }
 
+        private void BtnSetDefault_Click(object sender, RoutedEventArgs e)
+        {
+            string url = TxtDefaultAddress.Text?.Trim() ?? "";
+            if (string.IsNullOrEmpty(url)) return;
+            if (!url.StartsWith("http://") && !url.StartsWith("https://"))
+                url = "https://" + url;
+            _appData.DefaultAddress = url;
+            MessageBox.Show("默认地址已保存！", "澪一 无界", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
         private void Save_Click(object sender, RoutedEventArgs e)
         {
-            _mainWindow.SaveDatabase();
-            _mainWindow.ApplyHotkeys(); // 通知主窗口重新注册热键
-            this.Close();
+            string defaultUrl = TxtDefaultAddress.Text?.Trim() ?? "";
+            if (!string.IsNullOrEmpty(defaultUrl))
+            {
+                if (!defaultUrl.StartsWith("http://") && !defaultUrl.StartsWith("https://"))
+                    defaultUrl = "https://" + defaultUrl;
+                _appData.DefaultAddress = defaultUrl;
+            }
+            _mainWindow.ApplyHotkeys();
+            _mainWindow.RefreshTrayIcon();
+            _mainWindow.UpdateWindowIcon();
+            _mainWindow.SaveConfig();
+            MessageBox.Show("设置已保存！", "澪一 无界", MessageBoxButton.OK, MessageBoxImage.Information);
+            Close();
+        }
+
+        private void BtnBrowseIcon_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "图标文件 (*.ico)|*.ico|All Files (*.*)|*.*",
+                Title = "选择图标"
+            };
+            if (dialog.ShowDialog() == true)
+            {
+                try
+                {
+                    if (!Directory.Exists("ico")) Directory.CreateDirectory("ico");
+                    string destPath = Path.Combine("ico", "app.ico");
+                    File.Copy(dialog.FileName, destPath, true);
+                    TxtIconPath.Text = destPath;
+                    _appData.CustomIconPath = destPath;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"图标复制失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private void BtnClearIcon_Click(object sender, RoutedEventArgs e)
+        {
+            TxtIconPath.Text = "";
+            _appData.CustomIconPath = "";
         }
     }
 }

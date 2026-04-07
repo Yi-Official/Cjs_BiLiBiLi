@@ -1,4 +1,4 @@
-﻿﻿using System;
+using System;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -10,6 +10,7 @@ using System.IO;
 using System.Text.Json;
 using System.Collections.Generic;
 using System.Linq;
+using System.Windows.Threading;
 
 namespace Boundless
 {
@@ -35,6 +36,8 @@ namespace Boundless
         public HotkeyConfig Forward { get; set; } = new() { Modifiers = 6, Vk = 0x33, Display = "Ctrl + Shift + 3" };
         public HotkeyConfig Next { get; set; } = new() { Modifiers = 6, Vk = 0x34, Display = "Ctrl + Shift + 4" };
         public HotkeyConfig Toggle { get; set; } = new() { Modifiers = 7, Vk = 0x44, Display = "Ctrl + Alt + Shift + D" };
+        public HotkeyConfig OpacityUp { get; set; } = new() { Modifiers = 7, Vk = 0x21, Display = "Ctrl + Alt + Shift + PageUp" };
+        public HotkeyConfig OpacityDown { get; set; } = new() { Modifiers = 7, Vk = 0x22, Display = "Ctrl + Alt + Shift + PageDown" };
     }
 
     public class AppData
@@ -43,6 +46,7 @@ namespace Boundless
         public string LastGame { get; set; } = "";
         public string CurrentTheme { get; set; } = "默认主题";
         public bool BossMode { get; set; } = false;
+        public string DefaultAddress { get; set; } = "https://www.bilibili.com";
         public AppHotkeys Hotkeys { get; set; } = new AppHotkeys();
         public Dictionary<string, Dictionary<string, ProfileData>> Profiles { get; set; } = new();
         // 保存窗口位置和大小
@@ -50,6 +54,9 @@ namespace Boundless
         public double WindowHeight { get; set; } = 700;
         public double WindowLeft { get; set; } = -1;
         public double WindowTop { get; set; } = -1;
+        public double WindowOpacity { get; set; } = 1.0;
+        public string CustomIconPath { get; set; } = "";
+        public List<string> CustomAddresses { get; set; } = new();
     }
 
     public partial class MainWindow : Window
@@ -58,14 +65,70 @@ namespace Boundless
         [DllImport("user32.dll")] private static extern int SetWindowLong(nint hwnd, int index, int newStyle);
         [DllImport("user32.dll")] private static extern bool RegisterHotKey(nint hWnd, int id, uint fsModifiers, uint vk);
         [DllImport("user32.dll")] private static extern bool UnregisterHotKey(nint hWnd, int id);
+        [DllImport("user32.dll")] private static extern int SetWindowCompositionAttribute(nint hwnd, ref WindowCompositionAttribData data);
         private const int GWL_EXSTYLE = -20; private const int WS_EX_TRANSPARENT = 0x00000020; private const int WS_EX_LAYERED = 0x00000080;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct WindowCompositionAttribData
+        {
+            public int Attrib;
+            public nint pvData;
+            public int cbData;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct AccentPolicy
+        {
+            public int AccentState;
+            public int AccentFlags;
+            public int GradientColor;
+            public int AnimationId;
+        }
+
+        private const int WCA_ACCENT_POLICY = 19;
+        private const int ACCENT_DISABLED = 0;
+        private const int ACCENT_ENABLE_TRANSPARENTGRADIENT = 2;
+        private const int ACCENT_ENABLE_BLURBEHIND = 3;
+
+        private void SetWindowTransparency(bool enable)
+        {
+            if (_windowHandle == nint.Zero) return;
+            var accent = new AccentPolicy();
+            if (enable)
+            {
+                accent.AccentState = ACCENT_ENABLE_TRANSPARENTGRADIENT;
+                accent.GradientColor = 0x01000000; // alpha=1，几乎透明但WPF认为有实体
+            }
+            else
+            {
+                accent.AccentState = ACCENT_DISABLED;
+            }
+            var size = Marshal.SizeOf(accent);
+            var ptr = Marshal.AllocHGlobal(size);
+            Marshal.StructureToPtr(accent, ptr, false);
+            var data = new WindowCompositionAttribData
+            {
+                Attrib = WCA_ACCENT_POLICY,
+                pvData = ptr,
+                cbData = size
+            };
+            SetWindowCompositionAttribute(_windowHandle, ref data);
+            Marshal.FreeHGlobal(ptr);
+        }
 
         private Point _dragStartPoint;
         private bool _isImmersive = false;
         private bool _isGhostMode = false;
+        private double _userOpacity = 1.0;
         private nint _windowHandle;
+        private bool _opacityCssInjected = false;
 
-        // 【消除警告 1】给托盘图标加上 ? 表示允许初始为空
+        // 透明度浮层自动隐藏计时器
+        private DispatcherTimer? _opacityPopupTimer;
+        private DispatcherTimer? _tipsTimer;
+        private int _tipsIndex = 0;
+        private bool _isInitializing = true;
+
         private System.Windows.Forms.NotifyIcon? _trayIcon;
         private Dictionary<int, Action> _hotkeyActions = new();
 
@@ -88,7 +151,7 @@ namespace Boundless
             ThemeManager.ApplyTheme(_appData.CurrentTheme);
             
             SetupTrayIcon(); 
-            InitializeBrowser(); // 优先初始化浏览器，确保事件处理程序已挂载
+            InitializeBrowser();
 
             string u = _appData.LastUser;
             string g = _appData.LastGame;
@@ -98,13 +161,12 @@ namespace Boundless
                 _currentUser = u; _currentGame = g; var profile = _appData.Profiles[u][g];
                 Width = profile.Width; Height = profile.Height;
                 if (profile.Left >= 0 && profile.Top >= 0) { Left = profile.Left; Top = profile.Top; }
-                StatusText.Text = $" 澪一 无界 穿透模式默认快捷键：Ctrl + Shift + Alt + F2 - 当前数据: {u} / {g}";
                 _pendingLoadTime = profile.VideoTime; 
                 BiliBrowser.Source = new Uri(profile.Url);
+                AddressBar.Text = profile.Url;
             }
             else 
             {
-                // 没有存档时，使用保存的窗口位置和大小
                 Width = _appData.WindowWidth;
                 Height = _appData.WindowHeight;
                 if (_appData.WindowLeft >= 0 && _appData.WindowTop >= 0)
@@ -112,30 +174,99 @@ namespace Boundless
                     Left = _appData.WindowLeft;
                     Top = _appData.WindowTop;
                 }
-                BiliBrowser.Source = new Uri("https://www.bilibili.com");
+                BiliBrowser.Source = new Uri(_appData.DefaultAddress);
+                AddressBar.Text = _appData.DefaultAddress;
             }
 
-            StateChanged += MainWindow_StateChanged; 
+            _userOpacity = _appData.WindowOpacity;
+            OpacitySlider.Value = _userOpacity;
+
+            StateChanged += MainWindow_StateChanged;
+
+            // 初始化透明度浮层计时器
+            _opacityPopupTimer = new DispatcherTimer();
+            _opacityPopupTimer.Interval = TimeSpan.FromSeconds(1.5);
+            _opacityPopupTimer.Tick += (s, ev) =>
+            {
+                _opacityPopupTimer.Stop();
+                OpacityPopup.IsOpen = false;
+            };
+
+            _tipsTimer = new DispatcherTimer();
+            _tipsTimer.Interval = TimeSpan.FromSeconds(4);
+            _tipsTimer.Tick += (s, ev) =>
+            {
+                UpdateTipsText();
+            };
+            _tipsTimer.Start();
+            UpdateTipsText();
+
+            _isInitializing = false;
+        }
+
+        private void UpdateTipsText()
+        {
+            string ghostHotkey = $"{_appData.Hotkeys.Ghost.Display} 开启/关闭穿透";
+            string opacityHotkey = $"{_appData.Hotkeys.OpacityUp.Display}/{_appData.Hotkeys.OpacityDown.Display} 调节透明度";
+            string newText = _tipsIndex == 0 ? $"澪一Tips：{ghostHotkey}" : $"澪一Tips：{opacityHotkey}";
+
+            var fadeOut = new System.Windows.Media.Animation.DoubleAnimation(0.8, 0, TimeSpan.FromMilliseconds(200));
+            fadeOut.Completed += (s, e) =>
+            {
+                StatusText.Text = newText;
+                _tipsIndex = _tipsIndex == 0 ? 1 : 0;
+                var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 0.8, TimeSpan.FromMilliseconds(200));
+                StatusText.BeginAnimation(System.Windows.Controls.TextBlock.OpacityProperty, fadeIn);
+            };
+            StatusText.BeginAnimation(System.Windows.Controls.TextBlock.OpacityProperty, fadeOut);
+        }
+
+        // ===== 地址栏：回车跳转 =====
+        private void AddressBar_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                string url = AddressBar.Text.Trim();
+                if (string.IsNullOrEmpty(url)) return;
+                // 自动补全协议
+                if (!url.StartsWith("http://") && !url.StartsWith("https://"))
+                    url = "https://" + url;
+                BiliBrowser.CoreWebView2?.Navigate(url);
+                Keyboard.ClearFocus();
+                e.Handled = true;
+            }
+        }
+
+        // ===== 透明度浮层显示 =====
+        private void ShowOpacityOverlay(double opacity)
+        {
+            int pct = (int)Math.Round(opacity * 100);
+            OpacityOverlayText.Text = $"透明度: {pct}%";
+            OpacityPopup.IsOpen = true;
+            _opacityPopupTimer?.Stop();
+            _opacityPopupTimer?.Start();
         }
 
         private void SetupTrayIcon()
         {
             _trayIcon = new System.Windows.Forms.NotifyIcon();
-            
-            // 尝试加载图标：优先从 EXE 自身提取，其次尝试文件，最后保底系统图标
+
             try {
-                // 获取当前运行程序的路径并提取图标
-                string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "";
-                if (File.Exists(exePath)) {
-                    _trayIcon.Icon = System.Drawing.Icon.ExtractAssociatedIcon(exePath);
+                if (!string.IsNullOrEmpty(_appData.CustomIconPath) && File.Exists(_appData.CustomIconPath))
+                {
+                    _trayIcon.Icon = new System.Drawing.Icon(_appData.CustomIconPath);
                 }
-                
-                // 如果提取失败且本地存在 favicon.ico，则尝试直接加载文件
-                if (_trayIcon.Icon == null && File.Exists("favicon.ico")) {
-                    _trayIcon.Icon = new System.Drawing.Icon("favicon.ico");
+                else
+                {
+                    string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "";
+                    if (File.Exists(exePath)) {
+                        _trayIcon.Icon = System.Drawing.Icon.ExtractAssociatedIcon(exePath);
+                    }
+                    if (_trayIcon.Icon == null && File.Exists("favicon.ico")) {
+                        _trayIcon.Icon = new System.Drawing.Icon("favicon.ico");
+                    }
                 }
             } catch {
-                // 最终保底使用系统默认图标
                 _trayIcon.Icon = System.Drawing.SystemIcons.Application;
             }
 
@@ -143,38 +274,18 @@ namespace Boundless
             _trayIcon.Visible = true;
 
             var menu = new System.Windows.Forms.ContextMenuStrip();
-            
-            // 【消除警告 2】用 null! 强行告诉系统不用担心空值
-            menu.Items.Add("显示/隐藏 窗口", null!, (s, e) => {
-                ToggleVisibility();
-            });
+            menu.Items.Add("显示/隐藏 窗口", null!, (s, e) => { ToggleVisibility(); });
             menu.Items.Add("设置全局快捷键", null!, (s, e) => { new SettingsWindow(_appData, this).Show(); });
             
-            // 老板模式子菜单
             var bossModeMenu = new System.Windows.Forms.ToolStripMenuItem("老板模式");
             bossModeMenu.ToolTipText = "开启后，隐藏窗口时自动暂停视频，显示时自动继续播放";
-            
             var bossModeInfo = new System.Windows.Forms.ToolStripMenuItem("隐藏时暂停，显示时继续");
             bossModeInfo.Enabled = false;
-            
             var bossModeOn = new System.Windows.Forms.ToolStripMenuItem("开启");
-            
             var bossModeOff = new System.Windows.Forms.ToolStripMenuItem("关闭");
             
-            // 在声明后再添加事件处理
-            bossModeOn.Click += (s, e) => {
-                _appData.BossMode = true;
-                SaveConfig();
-                bossModeOn.Checked = true;
-                bossModeOff.Checked = false;
-            };
-            
-            bossModeOff.Click += (s, e) => {
-                _appData.BossMode = false;
-                SaveConfig();
-                bossModeOn.Checked = false;
-                bossModeOff.Checked = true;
-            };
+            bossModeOn.Click += (s, e) => { _appData.BossMode = true; SaveConfig(); bossModeOn.Checked = true; bossModeOff.Checked = false; };
+            bossModeOff.Click += (s, e) => { _appData.BossMode = false; SaveConfig(); bossModeOn.Checked = false; bossModeOff.Checked = true; };
             
             bossModeMenu.DropDownItems.Add(bossModeInfo);
             bossModeMenu.DropDownItems.Add(new System.Windows.Forms.ToolStripSeparator());
@@ -185,7 +296,6 @@ namespace Boundless
             menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
             menu.Items.Add("安全退出", null!, (s, e) => CloseButton_Click(null!, null!));
             
-            // 初始化老板模式菜单状态
             bossModeOn.Checked = _appData.BossMode;
             bossModeOff.Checked = !_appData.BossMode;
 
@@ -193,15 +303,66 @@ namespace Boundless
             _trayIcon.DoubleClick += (s, e) => { ToggleVisibility(); };
         }
 
+        public void RefreshTrayIcon()
+        {
+            if (_trayIcon != null)
+            {
+                _trayIcon.Visible = false;
+                _trayIcon.Dispose();
+            }
+            SetupTrayIcon();
+            UpdateWindowIcon();
+        }
+
+        public void UpdateWindowIcon()
+        {
+            string iconPath = !string.IsNullOrEmpty(_appData.CustomIconPath) && File.Exists(_appData.CustomIconPath)
+                ? _appData.CustomIconPath
+                : (File.Exists("ico/app.ico") ? "ico/app.ico" : "");
+
+            if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
+            {
+                try
+                {
+                    var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.UriSource = new Uri(Path.GetFullPath(iconPath), UriKind.Absolute);
+                    bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    bitmap.EndInit();
+                    bitmap.Freeze();
+                    Icon = bitmap;
+                    return;
+                }
+                catch { }
+            }
+
+            string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "";
+            if (File.Exists(exePath))
+            {
+                try
+                {
+                    var icon = System.Drawing.Icon.ExtractAssociatedIcon(exePath);
+                    if (icon != null)
+                    {
+                        var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                        bitmap.BeginInit();
+                        bitmap.UriSource = new Uri(exePath, UriKind.Absolute);
+                        bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                        bitmap.EndInit();
+                        bitmap.Freeze();
+                        Icon = bitmap;
+                    }
+                }
+                catch { }
+            }
+        }
+
         private void ToggleVisibility()
         {
             if (Visibility == Visibility.Visible && WindowState != WindowState.Minimized) 
             {
-                // 老板模式：隐藏时自动暂停视频
                 if (_appData.BossMode)
-                {
                     RunBrowserScript("document.querySelector('.bpx-player-ctrl-play')?.click();");
-                }
                 WindowState = WindowState.Minimized;
             }
             else 
@@ -209,38 +370,21 @@ namespace Boundless
                 Visibility = Visibility.Visible;
                 WindowState = WindowState.Normal;
                 Activate();
-                Topmost = true; // 强制置顶
+                Topmost = true;
                 Focus();
                 
-                // 老板模式：显示时自动继续播放
                 if (_appData.BossMode)
-                {
                     RunBrowserScript("document.querySelector('.bpx-player-ctrl-play')?.click();");
-                }
                 
-                // 如果处于穿透模式，保持小三角隐藏
                 ResizeCorner.Visibility = _isGhostMode ? Visibility.Hidden : Visibility.Visible;
                 
-                // 确保窗口置顶的额外措施
                 System.Threading.Tasks.Task.Delay(50).ContinueWith(_ =>
                 {
-                    Dispatcher.Invoke(() =>
-                    {
-                        Topmost = false;
-                        Topmost = true;
-                        Activate();
-                        Focus();
-                    });
+                    Dispatcher.Invoke(() => { Topmost = false; Topmost = true; Activate(); Focus(); });
                 });
-                
-                // 再次延迟确保窗口完全显示并置顶
                 System.Threading.Tasks.Task.Delay(150).ContinueWith(_ =>
                 {
-                    Dispatcher.Invoke(() =>
-                    {
-                        Activate();
-                        Focus();
-                    });
+                    Dispatcher.Invoke(() => { Activate(); Focus(); });
                 });
             }
         }
@@ -254,12 +398,48 @@ namespace Boundless
             ApplyHotkeys(); 
         }
 
+        private void ApplyWindowOpacity(double opacity)
+        {
+            if (opacity < 1.0)
+            {
+                InjectOpacityCss(opacity);
+                RootContainer.Background = Brushes.Transparent;
+                SetWindowTransparency(true);
+            }
+            else
+            {
+                RemoveOpacityCss();
+                SetWindowTransparency(false);
+                if (ThemeManager.CurrentTheme != null && !ThemeManager.CurrentTheme.Styles.EnableAcrylic)
+                    RootContainer.Background = ThemeManager.GetBrush(ThemeManager.CurrentTheme.Colors.WindowBackground);
+            }
+        }
+
+        private async void InjectOpacityCss(double opacity)
+        {
+            if (BiliBrowser.CoreWebView2 == null) return;
+            string js = $@"(function(){{
+                var s = document.getElementById('boundless-opacity-style');
+                if(!s){{ s = document.createElement('style'); s.id='boundless-opacity-style'; document.head.appendChild(s); }}
+                s.innerHTML = 'html,body{{background:transparent!important;opacity:{opacity:F2}!important;}} ::-webkit-scrollbar{{display:none!important;}}';
+            }})();";
+            await BiliBrowser.CoreWebView2.ExecuteScriptAsync(js);
+            _opacityCssInjected = true;
+        }
+
+        private async void RemoveOpacityCss()
+        {
+            if (BiliBrowser.CoreWebView2 == null) return;
+            await BiliBrowser.CoreWebView2.ExecuteScriptAsync(
+                @"(function(){var s=document.getElementById('boundless-opacity-style');if(s)s.remove();})();");
+            _opacityCssInjected = false;
+        }
+
         public void ApplyHotkeys()
         {
-            for (int i = 1; i <= 8; i++) UnregisterHotKey(_windowHandle, i);
+            for (int i = 1; i <= 10; i++) UnregisterHotKey(_windowHandle, i);
             _hotkeyActions.Clear();
 
-            // 【消除警告 3】用 null! 强行通过系统对 sender 参数的检查
             RegisterKey(1, _appData.Hotkeys.Ghost, ToggleGhostMode);
             RegisterKey(2, _appData.Hotkeys.Immerse, () => ImmersiveButton_Click(null!, null!));
             RegisterKey(3, _appData.Hotkeys.Prev, () => PrevP_Click(null!, null!));
@@ -268,6 +448,9 @@ namespace Boundless
             RegisterKey(6, _appData.Hotkeys.Forward, () => Forward_Click(null!, null!));
             RegisterKey(7, _appData.Hotkeys.Next, () => NextP_Click(null!, null!));
             RegisterKey(8, _appData.Hotkeys.Toggle, ToggleVisibility);
+            RegisterKey(9, _appData.Hotkeys.OpacityUp, () => AdjustOpacity(0.05));
+            RegisterKey(10, _appData.Hotkeys.OpacityDown, () => AdjustOpacity(-0.05));
+            UpdateTipsText();
         }
 
         private void RegisterKey(int id, HotkeyConfig config, Action action)
@@ -304,7 +487,6 @@ namespace Boundless
 
         private void LoadDatabase() 
         { 
-            // 1. 加载全局配置
             if (File.Exists(ConfigPath)) { 
                 try { 
                     string json = File.ReadAllText(ConfigPath); 
@@ -314,26 +496,30 @@ namespace Boundless
                         _appData.LastGame = data.LastGame;
                         _appData.CurrentTheme = data.CurrentTheme;
                         _appData.BossMode = data.BossMode;
+                        if (!string.IsNullOrEmpty(data.DefaultAddress))
+                            _appData.DefaultAddress = data.DefaultAddress;
                         _appData.Hotkeys = data.Hotkeys;
-                        // 加载窗口位置和大小
                         _appData.WindowWidth = data.WindowWidth;
                         _appData.WindowHeight = data.WindowHeight;
                         _appData.WindowLeft = data.WindowLeft;
                         _appData.WindowTop = data.WindowTop;
-                        // 如果旧文件里还有 Profiles，准备迁移
+                        if (data.WindowOpacity >= 0 && data.WindowOpacity <= 1.0)
+                            _appData.WindowOpacity = data.WindowOpacity;
+                        if (!string.IsNullOrEmpty(data.CustomIconPath))
+                            _appData.CustomIconPath = data.CustomIconPath;
+                        if (data.CustomAddresses != null)
+                            _appData.CustomAddresses = data.CustomAddresses;
                         if (data.Profiles != null && data.Profiles.Count > 0) {
                             foreach(var kv in data.Profiles) {
                                 SaveUserProfile(kv.Key, kv.Value);
                                 _appData.Profiles[kv.Key] = kv.Value;
                             }
-                            // 迁移后清空并保存不带 Profiles 的配置
                             SaveConfig(); 
                         }
                     }
                 } catch { } 
             } 
 
-            // 2. 加载“数据”文件夹下的所有分组文件
             if (Directory.Exists(DataDir)) {
                 foreach (string file in Directory.GetFiles(DataDir, "*.json")) {
                     try {
@@ -350,19 +536,21 @@ namespace Boundless
 
         public void SaveConfig() 
         { 
-            // 只保存全局配置，不包含 Profiles
             var configOnly = new AppData {
                 LastUser = _appData.LastUser,
                 LastGame = _appData.LastGame,
                 CurrentTheme = _appData.CurrentTheme,
                 BossMode = _appData.BossMode,
+                DefaultAddress = _appData.DefaultAddress,
+                CustomIconPath = _appData.CustomIconPath,
                 Hotkeys = _appData.Hotkeys,
-                Profiles = new Dictionary<string, Dictionary<string, ProfileData>>(), // 保持为空
-                // 保存窗口位置和大小
+                Profiles = new Dictionary<string, Dictionary<string, ProfileData>>(),
                 WindowWidth = WindowState == WindowState.Maximized ? RestoreBounds.Width : Width,
                 WindowHeight = WindowState == WindowState.Maximized ? RestoreBounds.Height : Height,
                 WindowLeft = WindowState == WindowState.Maximized ? RestoreBounds.Left : Left,
-                WindowTop = WindowState == WindowState.Maximized ? RestoreBounds.Top : Top
+                WindowTop = WindowState == WindowState.Maximized ? RestoreBounds.Top : Top,
+                WindowOpacity = _userOpacity,
+                CustomAddresses = _appData.CustomAddresses
             };
             string json = JsonSerializer.Serialize(configOnly, new JsonSerializerOptions { WriteIndented = true }); 
             File.WriteAllText(ConfigPath, json); 
@@ -382,7 +570,7 @@ namespace Boundless
             if (File.Exists(filePath)) File.Delete(filePath);
         }
 
-        public void SaveDatabase() { SaveConfig(); } // 兼容旧代码，实际大部分由 SaveConfig 和 SaveUserProfile 处理
+        public void SaveDatabase() { SaveConfig(); }
 
         private void OpenDataPanel_Click(object sender, RoutedEventArgs e) { BiliBrowser.Visibility = Visibility.Hidden; DataPanel.Visibility = Visibility.Visible; RefreshAllUserLists(); TabLoad_Click(sender, e); }
         private void CloseDataPanel_Click(object sender, RoutedEventArgs e) { DataPanel.Visibility = Visibility.Hidden; BiliBrowser.Visibility = Visibility.Visible; }
@@ -391,7 +579,6 @@ namespace Boundless
         private void TabManage_Click(object sender, RoutedEventArgs e) { ViewLoad.Visibility = Visibility.Hidden; ViewSave.Visibility = Visibility.Hidden; ViewManage.Visibility = Visibility.Visible; }
 
         private void RefreshAllUserLists() { 
-            // 保存当前选中的用户，以便尽量恢复选择
             string? selectedLoadUser = ComboLoadUser.SelectedItem as string;
             string? selectedManageUser = ComboManageUser.SelectedItem as string;
             string? selectedSaveUser = ComboSaveUser.Text;
@@ -401,12 +588,10 @@ namespace Boundless
             ComboManageUser.ItemsSource = users; 
             ComboSaveUser.ItemsSource = users; 
             
-            // 尝试恢复选择，如果用户已不存在则会自动变为未选中
             ComboLoadUser.SelectedItem = selectedLoadUser;
             ComboManageUser.SelectedItem = selectedManageUser;
             ComboSaveUser.Text = selectedSaveUser;
 
-            // 强制刷新游戏列表
             ComboLoadUser_SelectionChanged(null!, null!);
             ComboManageUser_SelectionChanged(null!, null!);
             ComboSaveUser_TextChanged(null!, null!);
@@ -444,7 +629,6 @@ namespace Boundless
             string? game = ComboLoadGame.SelectedItem as string;
             
             if (!string.IsNullOrEmpty(user) && !string.IsNullOrEmpty(game)) {
-                // 安全检查：防止数据已被删除但 UI 仍显示导致崩溃
                 if (!_appData.Profiles.ContainsKey(user) || !_appData.Profiles[user].ContainsKey(game)) {
                     MessageBox.Show("该数据已不存在，请刷新列表后再试。");
                     RefreshAllUserLists();
@@ -456,9 +640,9 @@ namespace Boundless
                 if (profile.Left >= 0 && profile.Top >= 0) { Left = profile.Left; Top = profile.Top; }
                 _pendingLoadTime = profile.VideoTime; 
                 BiliBrowser.CoreWebView2?.Navigate(profile.Url);
+                AddressBar.Text = profile.Url;
                 _currentUser = user; _currentGame = game; _appData.LastUser = user; _appData.LastGame = game;
-                StatusText.Text = $" 澪一 无界 穿透模式默认快捷键：Ctrl + Shift + Alt + F2 - 当前数据: {user} / {game}";
-                SaveConfig(); // 保存最后使用的配置
+                SaveConfig();
                 DataPanel.Visibility = Visibility.Hidden; BiliBrowser.Visibility = Visibility.Visible; 
             }
         }
@@ -473,12 +657,11 @@ namespace Boundless
             if (!_appData.Profiles.ContainsKey(user)) _appData.Profiles[user] = new Dictionary<string, ProfileData>();
             _appData.Profiles[user][game] = newProfile;
             _currentUser = user; _currentGame = game; _appData.LastUser = user; _appData.LastGame = game;
-            StatusText.Text = $" 澪一 无界 穿透模式默认快捷键：Ctrl + Shift + Alt + F2 - 当前数据: {user} / {game}";
             
             SaveConfig();
-            SaveUserProfile(user, _appData.Profiles[user]); // 单独保存该分组的文件
+            SaveUserProfile(user, _appData.Profiles[user]);
             
-            RefreshAllUserLists(); // 保存后刷新所有页面的下拉列表
+            RefreshAllUserLists();
             MessageBox.Show($"[{user}] 的 [{game}] 数据已成功保存！"); DataPanel.Visibility = Visibility.Hidden; BiliBrowser.Visibility = Visibility.Visible;
         }
 
@@ -489,26 +672,23 @@ namespace Boundless
             if (!string.IsNullOrEmpty(user) && !string.IsNullOrEmpty(game)) {
                 _appData.Profiles[user].Remove(game);
                 
-                // 如果删除的是当前正在使用的存档，清空当前用户和游戏
                 if (_currentUser == user && _currentGame == game)
                 {
                     _currentUser = "";
                     _currentGame = "";
                     _appData.LastUser = "";
                     _appData.LastGame = "";
-                    StatusText.Text = " 澪一 无界 穿透模式默认快捷键：Ctrl + Shift + Alt + F2";
                 }
                 
                 if (_appData.Profiles[user].Count == 0) {
                     _appData.Profiles.Remove(user); 
-                    DeleteUserProfile(user); // 删除对应的 JSON 文件
+                    DeleteUserProfile(user);
                 } else {
-                    SaveUserProfile(user, _appData.Profiles[user]); // 更新对应的 JSON 文件
+                    SaveUserProfile(user, _appData.Profiles[user]);
                 }
                 
                 SaveConfig(); 
-                RefreshAllUserLists(); // 删除后刷新所有页面的下拉列表
-                
+                RefreshAllUserLists();
                 MessageBox.Show("删除成功！");
             }
         }
@@ -539,45 +719,61 @@ namespace Boundless
             }
             else
             {
-                // 没有存档时，也要保存窗口位置和大小
                 SaveConfig();
             }
             
             _trayIcon?.Dispose(); 
-            for (int i = 1; i <= 7; i++) UnregisterHotKey(_windowHandle, i);
+            for (int i = 1; i <= 10; i++) UnregisterHotKey(_windowHandle, i);
             Close();
+        }
+
+        // 透明度滚轮调节 (Ctrl + Shift + Alt + 滚轮)
+        private void Window_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift | ModifierKeys.Alt))
+            {
+                double delta = e.Delta > 0 ? 0.05 : -0.05;
+                AdjustOpacity(delta);
+                e.Handled = true;
+            }
+        }
+
+        // 透明度调节（仅在穿透模式下可用）
+        private void AdjustOpacity(double delta)
+        {
+            if (!_isGhostMode) return;
+            _userOpacity = Math.Clamp(_userOpacity + delta, 0, 1.0);
+            OpacitySlider.Value = _userOpacity;
+            ApplyWindowOpacity(_userOpacity);
+            ShowOpacityOverlay(_userOpacity);
         }
 
         private void ToggleGhostMode()
         {
             _isGhostMode = !_isGhostMode; int extendedStyle = GetWindowLong(_windowHandle, GWL_EXSTYLE);
-            if (_isGhostMode) 
-            { 
+            if (_isGhostMode)
+            {
                 SetWindowLong(_windowHandle, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT | WS_EX_LAYERED);
-                Opacity = 0.6; 
                 TopControlBar.Visibility = Visibility.Hidden;
                 ResizeCorner.Visibility = Visibility.Hidden;
-                // 隐藏边框 - 将窗口背景设为完全透明
+                OpacityControlPanel.Visibility = Visibility.Visible;
                 RootContainer.Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
             }
-            else 
-            { 
+            else
+            {
                 SetWindowLong(_windowHandle, GWL_EXSTYLE, extendedStyle & ~WS_EX_TRANSPARENT);
-                Opacity = 1.0; 
                 TopControlBar.Visibility = Visibility.Visible;
                 ResizeCorner.Visibility = Visibility.Visible;
-                // 恢复边框 - 应用当前主题的背景色
+                OpacityControlPanel.Visibility = Visibility.Collapsed;
+                OpacitySlider.Value = 1.0;
+                ApplyWindowOpacity(1.0);
                 if (ThemeManager.CurrentTheme != null)
                 {
                     ThemeManager.EnableAcrylic(this, ThemeManager.CurrentTheme.Styles.EnableAcrylic, ThemeManager.CurrentTheme.Colors.AcrylicTintColor, ThemeManager.CurrentTheme.Styles.AcrylicOpacity);
                     if (!ThemeManager.CurrentTheme.Styles.EnableAcrylic)
-                    {
                         RootContainer.Background = ThemeManager.GetBrush(ThemeManager.CurrentTheme.Colors.WindowBackground);
-                    }
                     else
-                    {
                         RootContainer.Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
-                    }
                 }
             }
         }
@@ -591,26 +787,28 @@ namespace Boundless
         private async void InitializeBrowser()
         {
             try {
-                // 1. 尝试使用内置引擎 (Fixed Version)
                 string localRuntimePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WebView2Runtime");
                 CoreWebView2Environment? env = null;
                 
                 if (Directory.Exists(localRuntimePath)) {
-                    // 如果存在 WebView2Runtime 文件夹，则强制使用它作为浏览器引擎
                     env = await CoreWebView2Environment.CreateAsync(browserExecutableFolder: localRuntimePath);
                 }
 
-                // 2. 订阅初始化完成事件
                 BiliBrowser.CoreWebView2InitializationCompleted += (s, e) => {
                     if (e.IsSuccess) {
-                        // 禁用右键菜单
                         BiliBrowser.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
-                        // 禁用鼠标滚轮缩放
                         BiliBrowser.CoreWebView2.Settings.IsZoomControlEnabled = false;
+                        BiliBrowser.DefaultBackgroundColor = System.Drawing.Color.FromArgb(0, 0, 0, 0);
+
+                        Dispatcher.BeginInvoke(new Action(() => ApplyWindowOpacity(_userOpacity)));
                         
-                        BiliBrowser.CoreWebView2.NewWindowRequested += (s2, e2) => { e2.Handled = true; BiliBrowser.CoreWebView2.Navigate(e2.Uri); };
+                        // 导航完成后同步地址栏
                         BiliBrowser.CoreWebView2.NavigationCompleted += async (s2, e2) => {
-                            // 隐藏滚动条
+                            // 同步地址栏
+                            Dispatcher.Invoke(() => {
+                                AddressBar.Text = BiliBrowser.Source?.ToString() ?? "";
+                            });
+
                             string hideScrollbarScript = @"
                                 (function() {
                                     let styleId = 'hide-scrollbar-style';
@@ -622,12 +820,14 @@ namespace Boundless
                                     }
                                 })();";
                             await BiliBrowser.CoreWebView2.ExecuteScriptAsync(hideScrollbarScript);
-                            
+
+                            if (_opacityCssInjected)
+                                InjectOpacityCss(_userOpacity);
+
                             if (_pendingLoadTime > 0)
                             {
                                 double targetTime = _pendingLoadTime;
                                 _pendingLoadTime = 0;
-                                
                                 string jsScript = $@"
                                     (function() {{
                                         let target = {targetTime.ToString("F2")};
@@ -649,13 +849,14 @@ namespace Boundless
                                 await BiliBrowser.CoreWebView2.ExecuteScriptAsync(jsScript);
                             }
                         };
+
+                        BiliBrowser.CoreWebView2.NewWindowRequested += (s2, e2) => { e2.Handled = true; BiliBrowser.CoreWebView2.Navigate(e2.Uri); };
                     } else {
                         string msg = e.InitializationException?.Message ?? "未知错误";
                         MessageBox.Show($"浏览器引擎初始化失败: {msg}\n\n建议方案：\n1. 确保已安装 Microsoft Edge WebView2 Runtime。\n2. 或者在程序目录下放置 'WebView2Runtime' 文件夹。", "启动错误");
                     }
                 };
                 
-                // 3. 执行初始化
                 await BiliBrowser.EnsureCoreWebView2Async(env);
             } catch (Exception ex) {
                 MessageBox.Show($"无法加载浏览器引擎: {ex.Message}\n\n请尝试安装 Microsoft Edge WebView2 Runtime，或者使用包含内置引擎的版本。", "启动错误");
@@ -676,6 +877,16 @@ namespace Boundless
         private void TopControlBar_MouseEnter(object sender, MouseEventArgs e) { TopControlBar.Height = 35; TopControlBar.Background = ThemeManager.GetBrush(ThemeManager.CurrentTheme.Colors.TopBarBackground); TopControlContent.Visibility = Visibility.Visible; double rb = WindowState == WindowState.Maximized ? 0 : 12; BiliBrowser.Margin = new Thickness(0, 35, rb, rb); }
         private void TopControlBar_MouseLeave(object sender, MouseEventArgs e) { TopControlBar.Height = 10; TopControlBar.Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)); TopControlContent.Visibility = Visibility.Hidden; double rb = WindowState == WindowState.Maximized ? 0 : 12; BiliBrowser.Margin = new Thickness(0, 10, rb, rb); }
         private void ResizeGrip_DragDelta(object sender, DragDeltaEventArgs e) { if (Width + e.HorizontalChange > MinWidth) Width += e.HorizontalChange; if (Height + e.VerticalChange > MinHeight) Height += e.VerticalChange; }
+
+        // 透明度滑块事件（仅在穿透模式下可用）
+        private void OpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (OpacitySlider == null || _isInitializing) return;
+            if (!_isGhostMode) return;
+            _userOpacity = OpacitySlider.Value;
+            ApplyWindowOpacity(_userOpacity);
+            ShowOpacityOverlay(_userOpacity);
+        }
 
         private void OnThemeChanged(ThemeData theme)
         {
@@ -741,6 +952,9 @@ namespace Boundless
 
             ListManageGames.Background = ThemeManager.GetBrush(colors.InputBackground);
             ListManageGames.Foreground = ThemeManager.GetBrush(colors.InputForeground);
+
+            // 地址栏主题适配
+            AddressBar.Foreground = ThemeManager.GetBrush(colors.InputForeground);
         }
 
         private void ApplyButtonStyle(System.Windows.Controls.Button btn, string bg, string fg, string border, CornerRadius radius, Thickness borderThickness, FontWeight fontWeight, double opacity)
@@ -775,6 +989,7 @@ namespace Boundless
             }
         }
 
+        // 打开主题窗口
         private void OpenThemeWindow_Click(object sender, RoutedEventArgs e)
         {
             new ThemeWindow(_appData, this).Show();
@@ -783,6 +998,7 @@ namespace Boundless
         public void SetCurrentTheme(string themeName)
         {
             _appData.CurrentTheme = themeName;
+            ThemeManager.ApplyTheme(themeName);
             SaveConfig();
         }
     }

@@ -5,7 +5,7 @@
         Title="无界 (Boundless)" Height="700" Width="1200"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent" 
         Topmost="True" MinHeight="300" MinWidth="450"
-        MouseLeftButtonDown="Window_MouseLeftButtonDown" MouseMove="Window_MouseMove">
+        MouseLeftButtonDown="Window_MouseLeftButtonDown" MouseMove="Window_MouseMove" PreviewMouseWheel="Window_PreviewMouseWheel">
 
     <Window.Resources>
         <Style x:Key="RoundedButtonStyle" TargetType="Button">
@@ -52,9 +52,16 @@
         </Style>
     </Window.Resources>
 
-    <Grid Name="RootContainer" Background="#80000000"> 
-        
+    <Grid Name="RootContainer" Background="#80000000">
+
         <wv2:WebView2 Name="BiliBrowser" Source="https://www.bilibili.com" Margin="0,5,12,12" />
+
+        <!-- 透明度浮层（独立Popup，不受窗口透明度影响） -->
+        <Popup Name="OpacityPopup" Placement="Center" AllowsTransparency="True" PopupAnimation="None" IsHitTestVisible="False">
+            <Border Background="#F0000000" CornerRadius="12" Padding="30,18">
+                <TextBlock Name="OpacityOverlayText" Text="透明度: 100%" Foreground="White" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center"/>
+            </Border>
+        </Popup>
 
         <Grid Name="TopControlBar" Height="10" VerticalAlignment="Top" Background="#01000000" Cursor="SizeAll"
               MouseEnter="TopControlBar_MouseEnter" MouseLeave="TopControlBar_MouseLeave">
@@ -66,7 +73,13 @@
                     <Button Name="BtnPlay" Content="⏯" Width="30" Height="20" Margin="0,0,5,0" Click="PlayPause_Click" Background="#444" Foreground="White" BorderThickness="0" Cursor="Hand" ToolTip="播放/暂停" Style="{StaticResource RoundedButtonStyle}"/>
                     <RepeatButton Name="BtnForward" Content="⏩" Width="30" Height="20" Margin="0,0,5,0" Click="Forward_Click" Delay="500" Interval="100" Background="#444" Foreground="White" BorderThickness="0" Cursor="Hand" ToolTip="快进 (长按连续)" Style="{StaticResource RoundedRepeatButtonStyle}"/>
                     <Button Name="BtnNext" Content="⏭" Width="30" Height="20" Margin="0,0,10,0" Click="NextP_Click" Background="#444" Foreground="White" BorderThickness="0" Cursor="Hand" ToolTip="下一P" Style="{StaticResource RoundedButtonStyle}"/>
-                    <TextBlock Name="StatusText" Text="澪一 无界 - 穿透模式默认快捷键：Ctrl + Shift + Alt + F2" Foreground="White" VerticalAlignment="Center" Opacity="0.8"/>
+                    
+                    <!-- 地址栏 -->
+                    <TextBox Name="AddressBar" Width="280" Height="22" FontSize="11" VerticalContentAlignment="Center"
+                             Background="#333" Foreground="White" BorderThickness="1" BorderBrush="#555" Padding="5,0"
+                             Text="https://www.bilibili.com" KeyDown="AddressBar_KeyDown" ToolTip="输入地址，回车跳转"/>
+
+                    <TextBlock Name="StatusText" Foreground="White" VerticalAlignment="Center" Opacity="0.8" Text="澪一 无界" Margin="10,0,0,0"/>
                 </StackPanel>
                 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,10,0">
@@ -74,6 +87,15 @@
                     <Button Name="BtnTheme" Content="主题 (🎨)" Width="65" Height="20" Margin="0,0,10,0" Click="OpenThemeWindow_Click" Cursor="Hand" Background="#444" Foreground="White" BorderThickness="0" Style="{StaticResource RoundedButtonStyle}"/>
                     <Button Name="BtnImmerse" Content="沉浸 (👁️)" Width="65" Height="20" Margin="0,0,10,0" Click="ImmersiveButton_Click" Cursor="Hand" Background="#444" Foreground="White" BorderThickness="0" Style="{StaticResource RoundedButtonStyle}"/>
                     <Button Name="BtnBack" Content="返回 (←)" Width="60" Height="20" Margin="0,0,10,0" Click="BackButton_Click" Cursor="Hand" Background="#444" Foreground="White" BorderThickness="0" Style="{StaticResource RoundedButtonStyle}"/>
+                    
+                    <!-- 透明度调节（穿透模式下通过快捷键控制，滑块已隐藏） -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,10,0" VerticalAlignment="Center" Name="OpacityControlPanel" Visibility="Collapsed">
+                        <TextBlock Text="透明度" Foreground="White" VerticalAlignment="Center" Opacity="0.7" FontSize="10" Margin="0,0,5,0"/>
+                        <Slider Name="OpacitySlider" Width="80" Minimum="0" Maximum="1.0" Value="1.0"
+                                SmallChange="0.05" LargeChange="0.1" VerticalAlignment="Center"
+                                ValueChanged="OpacitySlider_ValueChanged" ToolTip="窗口透明度"/>
+                    </StackPanel>
+                    
                     <Button Name="BtnMinimize" Content="隐藏 (-)" Width="60" Height="20" Margin="0,0,10,0" Click="MinimizeButton_Click" Cursor="Hand" Background="#444" Foreground="White" BorderThickness="0" Style="{StaticResource RoundedButtonStyle}"/>
                     <Button Name="BtnClose" Content="退出 (X)" Width="60" Height="20" Click="CloseButton_Click" Cursor="Hand" Background="#800" Foreground="White" BorderThickness="0" Style="{StaticResource RoundedButtonStyle}"/>
                 </StackPanel>
