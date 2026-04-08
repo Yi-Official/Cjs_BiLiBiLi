@@ -178,8 +178,8 @@ namespace Boundless
                 AddressBar.Text = _appData.DefaultAddress;
             }
 
-            _userOpacity = _appData.WindowOpacity;
-            OpacitySlider.Value = _userOpacity;
+            _userOpacity = 1.0;
+            OpacitySlider.Value = 1.0;
 
             StateChanged += MainWindow_StateChanged;
 
@@ -200,6 +200,7 @@ namespace Boundless
             };
             _tipsTimer.Start();
             UpdateTipsText();
+            UpdateDataButtonTooltip();
 
             _isInitializing = false;
         }
@@ -503,8 +504,6 @@ namespace Boundless
                         _appData.WindowHeight = data.WindowHeight;
                         _appData.WindowLeft = data.WindowLeft;
                         _appData.WindowTop = data.WindowTop;
-                        if (data.WindowOpacity >= 0 && data.WindowOpacity <= 1.0)
-                            _appData.WindowOpacity = data.WindowOpacity;
                         if (!string.IsNullOrEmpty(data.CustomIconPath))
                             _appData.CustomIconPath = data.CustomIconPath;
                         if (data.CustomAddresses != null)
@@ -549,7 +548,7 @@ namespace Boundless
                 WindowHeight = WindowState == WindowState.Maximized ? RestoreBounds.Height : Height,
                 WindowLeft = WindowState == WindowState.Maximized ? RestoreBounds.Left : Left,
                 WindowTop = WindowState == WindowState.Maximized ? RestoreBounds.Top : Top,
-                WindowOpacity = _userOpacity,
+                WindowOpacity = 1.0,
                 CustomAddresses = _appData.CustomAddresses
             };
             string json = JsonSerializer.Serialize(configOnly, new JsonSerializerOptions { WriteIndented = true }); 
@@ -625,9 +624,9 @@ namespace Boundless
 
         private void ExecuteLoad_Click(object sender, RoutedEventArgs e)
         {
-            string? user = ComboLoadUser.SelectedItem as string; 
+            string? user = ComboLoadUser.SelectedItem as string;
             string? game = ComboLoadGame.SelectedItem as string;
-            
+
             if (!string.IsNullOrEmpty(user) && !string.IsNullOrEmpty(game)) {
                 if (!_appData.Profiles.ContainsKey(user) || !_appData.Profiles[user].ContainsKey(game)) {
                     MessageBox.Show("该数据已不存在，请刷新列表后再试。");
@@ -638,13 +637,22 @@ namespace Boundless
                 var profile = _appData.Profiles[user][game];
                 Width = profile.Width; Height = profile.Height;
                 if (profile.Left >= 0 && profile.Top >= 0) { Left = profile.Left; Top = profile.Top; }
-                _pendingLoadTime = profile.VideoTime; 
+                _pendingLoadTime = profile.VideoTime;
                 BiliBrowser.CoreWebView2?.Navigate(profile.Url);
                 AddressBar.Text = profile.Url;
                 _currentUser = user; _currentGame = game; _appData.LastUser = user; _appData.LastGame = game;
                 SaveConfig();
-                DataPanel.Visibility = Visibility.Hidden; BiliBrowser.Visibility = Visibility.Visible; 
+                DataPanel.Visibility = Visibility.Hidden; BiliBrowser.Visibility = Visibility.Visible;
+                UpdateDataButtonTooltip();
             }
+        }
+
+        private void UpdateDataButtonTooltip()
+        {
+            if (!string.IsNullOrEmpty(_appData.LastUser) && !string.IsNullOrEmpty(_appData.LastGame))
+                BtnData.ToolTip = $"当前读取：{_appData.LastUser} / {_appData.LastGame}";
+            else
+                BtnData.ToolTip = "当前读取：未读取";
         }
 
         private async void ExecuteSave_Click(object sender, RoutedEventArgs e)
@@ -758,6 +766,8 @@ namespace Boundless
                 ResizeCorner.Visibility = Visibility.Hidden;
                 OpacityControlPanel.Visibility = Visibility.Visible;
                 RootContainer.Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
+                BiliBrowser.Margin = new Thickness(0);
+                ApplyWindowOpacity(_userOpacity);
             }
             else
             {
@@ -766,6 +776,7 @@ namespace Boundless
                 ResizeCorner.Visibility = Visibility.Visible;
                 OpacityControlPanel.Visibility = Visibility.Collapsed;
                 OpacitySlider.Value = 1.0;
+                BiliBrowser.Margin = new Thickness(0, TopControlBar.Height, 12, 12);
                 ApplyWindowOpacity(1.0);
                 if (ThemeManager.CurrentTheme != null)
                 {

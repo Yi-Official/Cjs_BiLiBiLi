@@ -4,6 +4,7 @@
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="无界 (Boundless)" Height="700" Width="1200"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent" 
+        ResizeMode="CanResize"
         Topmost="True" MinHeight="300" MinWidth="450"
         MouseLeftButtonDown="Window_MouseLeftButtonDown" MouseMove="Window_MouseMove" PreviewMouseWheel="Window_PreviewMouseWheel">
 
@@ -83,7 +84,7 @@
                 </StackPanel>
                 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,10,0">
-                    <Button Name="BtnData" Content="数据 (💾)" Width="65" Height="20" Margin="0,0,10,0" Click="OpenDataPanel_Click" Cursor="Hand" Background="#005A9E" Foreground="White" BorderThickness="0" Style="{StaticResource RoundedButtonStyle}"/>
+                    <Button Name="BtnData" Content="数据 (💾)" Width="65" Height="20" Margin="0,0,10,0" Click="OpenDataPanel_Click" Cursor="Hand" Background="#0059A9" Foreground="White" BorderThickness="0" Style="{StaticResource RoundedButtonStyle}" ToolTip="当前读取：未读取"/>
                     <Button Name="BtnTheme" Content="主题 (🎨)" Width="65" Height="20" Margin="0,0,10,0" Click="OpenThemeWindow_Click" Cursor="Hand" Background="#444" Foreground="White" BorderThickness="0" Style="{StaticResource RoundedButtonStyle}"/>
                     <Button Name="BtnImmerse" Content="沉浸 (👁️)" Width="65" Height="20" Margin="0,0,10,0" Click="ImmersiveButton_Click" Cursor="Hand" Background="#444" Foreground="White" BorderThickness="0" Style="{StaticResource RoundedButtonStyle}"/>
                     <Button Name="BtnBack" Content="返回 (←)" Width="60" Height="20" Margin="0,0,10,0" Click="BackButton_Click" Cursor="Hand" Background="#444" Foreground="White" BorderThickness="0" Style="{StaticResource RoundedButtonStyle}"/>
