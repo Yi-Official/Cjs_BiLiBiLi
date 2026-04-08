@@ -409,20 +409,30 @@ namespace Boundless
             }
             else
             {
-                RemoveOpacityCss();
-                SetWindowTransparency(false);
-                if (ThemeManager.CurrentTheme != null && !ThemeManager.CurrentTheme.Styles.EnableAcrylic)
-                    RootContainer.Background = ThemeManager.GetBrush(ThemeManager.CurrentTheme.Colors.WindowBackground);
+                if (_isGhostMode)
+                {
+                    InjectOpacityCss(1.0);
+                    RootContainer.Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
+                }
+                else
+                {
+                    RemoveOpacityCss();
+                    SetWindowTransparency(false);
+                    if (ThemeManager.CurrentTheme != null && !ThemeManager.CurrentTheme.Styles.EnableAcrylic)
+                        RootContainer.Background = ThemeManager.GetBrush(ThemeManager.CurrentTheme.Colors.WindowBackground);
+                }
             }
         }
 
         private async void InjectOpacityCss(double opacity)
         {
             if (BiliBrowser.CoreWebView2 == null) return;
+            BiliBrowser.DefaultBackgroundColor = System.Drawing.Color.FromArgb(0, 0, 0, 0);
             string js = $@"(function(){{
                 var s = document.getElementById('boundless-opacity-style');
                 if(!s){{ s = document.createElement('style'); s.id='boundless-opacity-style'; document.head.appendChild(s); }}
-                s.innerHTML = 'html,body{{background:transparent!important;opacity:{opacity:F2}!important;}} ::-webkit-scrollbar{{display:none!important;}}';
+                s.innerHTML = 'html,body{{background:transparent!important;opacity:{opacity:F2}!important;-webkit-text-stroke:0px!important;}} ::-webkit-scrollbar{{display:none!important;}}';
+                document.body&&document.body.style;
             }})();";
             await BiliBrowser.CoreWebView2.ExecuteScriptAsync(js);
             _opacityCssInjected = true;
@@ -695,8 +705,9 @@ namespace Boundless
                     SaveUserProfile(user, _appData.Profiles[user]);
                 }
                 
-                SaveConfig(); 
+                SaveConfig();
                 RefreshAllUserLists();
+                UpdateDataButtonTooltip();
                 MessageBox.Show("删除成功！");
             }
         }
